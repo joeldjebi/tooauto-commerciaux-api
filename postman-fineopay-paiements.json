@@ -1,0 +1,337 @@
+{
+  "info": {
+    "name": "COM-API - Paiements FineoPay",
+    "_postman_id": "9ef6a6b8-92f7-43f0-9f4d-3d6b2c5b8c01",
+    "description": "Collection Postman pour initier, verifier et simuler les retours FineoPay des paiements usagers et etablissements/professionnels.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://api-commerciaux.tooauto.com/api/v1" },
+    { "key": "bearer_token", "value": "" },
+    { "key": "reference_pro", "value": "TOO-PRO-202606090001" },
+    { "key": "reference_usager", "value": "TOO-USR-202606090001" },
+    { "key": "professionnel_id", "value": "1" },
+    { "key": "forfait_pro_id", "value": "2" },
+    { "key": "user_id", "value": "1" },
+    { "key": "forfait_id", "value": "2" },
+    { "key": "amount_pro", "value": "1000" },
+    { "key": "amount_usager", "value": "1000" },
+    { "key": "callback_token", "value": "" },
+    { "key": "fineopay_reference", "value": "FINEO-TEST-001" }
+  ],
+  "item": [
+    {
+      "name": "Etablissement / Pro",
+      "item": [
+        {
+          "name": "Initier paiement pro",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNumber\": \"{{reference_pro}}\",\n  \"amount\": {{amount_pro}},\n  \"description\": \"Paiement abonnement etablissement TOO AUTO\",\n  \"countryCurrencyCode\": \"XOF\",\n  \"customerEmail\": \"pro@example.com\",\n  \"customerFirstName\": \"Client\",\n  \"customerLastname\": \"Pro\",\n  \"customerPhoneNumber\": \"2250102030405\",\n  \"professionnel_id\": {{professionnel_id}},\n  \"forfait_pro_id\": {{forfait_pro_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/store-paiement",
+              "host": ["{{base_url}}"],
+              "path": ["store-paiement"]
+            }
+          },
+          "response": [
+            {
+              "name": "201 - Lien FineoPay genere",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  { "key": "Accept", "value": "application/json" },
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"referenceNumber\": \"{{reference_pro}}\",\n  \"amount\": {{amount_pro}},\n  \"description\": \"Paiement abonnement etablissement TOO AUTO\",\n  \"countryCurrencyCode\": \"XOF\",\n  \"customerEmail\": \"pro@example.com\",\n  \"customerFirstName\": \"Client\",\n  \"customerLastname\": \"Pro\",\n  \"customerPhoneNumber\": \"2250102030405\",\n  \"professionnel_id\": {{professionnel_id}},\n  \"forfait_pro_id\": {{forfait_pro_id}}\n}"
+                },
+                "url": { "raw": "{{base_url}}/store-paiement", "host": ["{{base_url}}"], "path": ["store-paiement"] }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"status\": \"success\",\n  \"message\": \"Lien de paiement genere avec succes\",\n  \"data\": {\n    \"paiement\": {\n      \"id\": 101,\n      \"referenceNumber\": \"TOO-PRO-202606090001\",\n      \"amount\": 1000,\n      \"professionnel_id\": 1,\n      \"forfait_pro_id\": 2,\n      \"statut\": \"en_attente\",\n      \"checkout_link\": \"https://dev.fineopay.com/checkout/demo-pro\"\n    },\n    \"checkoutLink\": \"https://dev.fineopay.com/checkout/demo-pro\",\n    \"syncRef\": \"TOO-PRO-202606090001\"\n  }\n}"
+            },
+            {
+              "name": "502 - FineoPay ne retourne pas de lien",
+              "status": "Bad Gateway",
+              "code": 502,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"status\": \"error\",\n  \"message\": \"FineoPay n'a pas retourne de lien de paiement.\",\n  \"fineopay\": {\n    \"success\": false,\n    \"message\": \"Invalid business credentials\"\n  },\n  \"http_status\": 401\n}"
+            }
+          ]
+        },
+        {
+          "name": "Check statut paiement pro",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"{{reference_pro}}\",\n  \"professionnel_id\": {{professionnel_id}},\n  \"forfait_pro_id\": {{forfait_pro_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/verify-paiement",
+              "host": ["{{base_url}}"],
+              "path": ["verify-paiement"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Paiement en attente",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"status\": \"en_attente\",\n  \"message\": \"Paiement en attente de confirmation.\",\n  \"data\": {\n    \"paiement\": {\n      \"referenceNumber\": \"TOO-PRO-202606090001\",\n      \"statut\": \"en_attente\"\n    },\n    \"abonnement\": null\n  }\n}"
+            },
+            {
+              "name": "200 - Paiement confirme",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"status\": \"success\",\n  \"message\": \"Paiement confirme. Abonnement active.\",\n  \"data\": {\n    \"paiement\": {\n      \"referenceNumber\": \"TOO-PRO-202606090001\",\n      \"statut\": \"success\",\n      \"fineopay_reference\": \"FINEO-TEST-001\"\n    },\n    \"abonnement\": {\n      \"etablissement_id\": 1,\n      \"professionnel_id\": 1,\n      \"forfait_pro_id\": 2\n    }\n  }\n}"
+            },
+            {
+              "name": "404 - Paiement introuvable",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Paiement introuvable.\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Usager",
+      "item": [
+        {
+          "name": "Initier paiement usager",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceNumber\": \"{{reference_usager}}\",\n  \"amount\": {{amount_usager}},\n  \"description\": \"Paiement abonnement usager TOO AUTO\",\n  \"countryCurrencyCode\": \"XOF\",\n  \"customerEmail\": \"usager@example.com\",\n  \"customerFirstName\": \"Client\",\n  \"customerLastname\": \"Usager\",\n  \"customerPhoneNumber\": \"2250102030405\",\n  \"user_id\": {{user_id}},\n  \"forfait_id\": {{forfait_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/store-paiement-usager",
+              "host": ["{{base_url}}"],
+              "path": ["store-paiement-usager"]
+            }
+          },
+          "response": [
+            {
+              "name": "201 - Lien FineoPay genere",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"status\": \"success\",\n  \"message\": \"Lien de paiement genere avec succes\",\n  \"data\": {\n    \"paiement\": {\n      \"id\": 201,\n      \"referenceNumber\": \"TOO-USR-202606090001\",\n      \"amount\": 1000,\n      \"user_id\": 1,\n      \"forfait_id\": 2,\n      \"statut\": \"en_attente\",\n      \"checkout_link\": \"https://dev.fineopay.com/checkout/demo-usager\"\n    },\n    \"checkoutLink\": \"https://dev.fineopay.com/checkout/demo-usager\",\n    \"syncRef\": \"TOO-USR-202606090001\"\n  }\n}"
+            },
+            {
+              "name": "422 - Donnees invalides",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"status\": \"error\",\n  \"message\": \"Les donnees fournies ne sont pas valides.\",\n  \"errors\": {\n    \"user_id\": [\"The selected user id is invalid.\"]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Check statut paiement usager",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"{{reference_usager}}\",\n  \"user_id\": {{user_id}},\n  \"forfait_id\": {{forfait_id}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/verify-paiement-usager",
+              "host": ["{{base_url}}"],
+              "path": ["verify-paiement-usager"]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Paiement en attente",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"status\": \"en_attente\",\n  \"message\": \"Paiement en attente de confirmation.\",\n  \"data\": {\n    \"paiement\": {\n      \"referenceNumber\": \"TOO-USR-202606090001\",\n      \"statut\": \"en_attente\"\n    },\n    \"abonnement\": null\n  }\n}"
+            },
+            {
+              "name": "200 - Paiement confirme",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"status\": \"success\",\n  \"message\": \"Paiement confirme. Abonnement active.\",\n  \"data\": {\n    \"paiement\": {\n      \"referenceNumber\": \"TOO-USR-202606090001\",\n      \"statut\": \"success\",\n      \"fineopay_reference\": \"FINEO-TEST-001\"\n    },\n    \"abonnement\": {\n      \"user_id\": 1,\n      \"forfait_id\": 2\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "FineoPay Callback (simulation)",
+      "item": [
+        {
+          "name": "Callback success pro",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Callback-Token", "value": "{{callback_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncRef\": \"{{reference_pro}}\",\n  \"reference\": \"{{fineopay_reference}}\",\n  \"amount\": {{amount_pro}},\n  \"status\": \"success\",\n  \"clientAccountNumber\": \"2250102030405\",\n  \"timestamp\": \"2026-06-09T12:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/fineopay/callback?token={{callback_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["fineopay", "callback"],
+              "query": [{ "key": "token", "value": "{{callback_token}}" }]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Callback pro confirme",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Paiement FineoPay confirme. Abonnement active.\",\n  \"data\": {\n    \"paiement\": {\n      \"referenceNumber\": \"TOO-PRO-202606090001\",\n      \"statut\": \"success\",\n      \"fineopay_reference\": \"FINEO-TEST-001\"\n    },\n    \"abonnement\": {\n      \"etablissement_id\": 1,\n      \"professionnel_id\": 1,\n      \"forfait_pro_id\": 2\n    }\n  }\n}"
+            },
+            {
+              "name": "200 - Paiement deja traite",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Paiement deja traite.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Callback success usager",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Callback-Token", "value": "{{callback_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncRef\": \"{{reference_usager}}\",\n  \"reference\": \"{{fineopay_reference}}\",\n  \"amount\": {{amount_usager}},\n  \"status\": \"success\",\n  \"clientAccountNumber\": \"2250102030405\",\n  \"timestamp\": \"2026-06-09T12:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/fineopay/callback?token={{callback_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["fineopay", "callback"],
+              "query": [{ "key": "token", "value": "{{callback_token}}" }]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Callback usager confirme",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Paiement FineoPay confirme. Abonnement active.\",\n  \"data\": {\n    \"paiement\": {\n      \"referenceNumber\": \"TOO-USR-202606090001\",\n      \"statut\": \"success\",\n      \"fineopay_reference\": \"FINEO-TEST-001\"\n    },\n    \"abonnement\": {\n      \"user_id\": 1,\n      \"forfait_id\": 2\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Callback failed",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Callback-Token", "value": "{{callback_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncRef\": \"{{reference_usager}}\",\n  \"reference\": \"{{fineopay_reference}}\",\n  \"amount\": {{amount_usager}},\n  \"status\": \"failed\",\n  \"clientAccountNumber\": \"2250102030405\",\n  \"timestamp\": \"2026-06-09T12:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/fineopay/callback?token={{callback_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["fineopay", "callback"],
+              "query": [{ "key": "token", "value": "{{callback_token}}" }]
+            }
+          },
+          "response": [
+            {
+              "name": "200 - Callback paiement echoue",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Callback FineoPay recu. Paiement marque comme echoue.\"\n}"
+            },
+            {
+              "name": "401 - Token callback invalide",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Token callback invalide.\"\n}"
+            },
+            {
+              "name": "422 - Montant incorrect",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Montant de paiement incorrect.\"\n}"
+            },
+            {
+              "name": "404 - Reference callback introuvable",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"success\": false,\n  \"message\": \"Paiement introuvable.\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
