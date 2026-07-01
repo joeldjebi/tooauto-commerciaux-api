@@ -928,7 +928,7 @@ class CommercialController extends Controller
                 "Voici vos identifiants de connexion :\n" .
                 "Numero de telephone : " . $request->mobile . "\n" .
                 "Mot de passe : " . $randomPassword . "\n" .
-                "Lien : https://tooauto.com/link-app"
+                "Telecharger Tooauto  : https://tooauto.com/link-app"
             );
 
             $smsResponse = $this->sendMessageConfirmOrder($message, $request->mobile);
