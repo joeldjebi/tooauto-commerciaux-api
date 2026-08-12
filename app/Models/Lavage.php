@@ -31,4 +31,9 @@ class Lavage extends Authenticatable
         'statut' => 'integer',
         'created_by' => 'integer',
     ];
+
+    public function stationDeLavage()
+    {
+        return $this->hasOne(StationDeLavage::class, 'created_by');
+    }
 }

@@ -2154,17 +2154,6 @@ class CommercialController extends Controller
                 Log::warning('Aucun fichier logo recu pour la station de lavage', $this->stationLogoUploadDiagnostics($request));
             }
 
-            $stationDeLavage = StationDeLavage::create([
-                'name' => html_entity_decode($request->name),
-                'adresse' => $request->filled('adresse') ? html_entity_decode($request->adresse) : null,
-                'contact' => html_entity_decode($request->contact),
-                'longitude' => $request->longitude,
-                'latitude' => $request->latitude,
-                'logo' => $logoPath,
-                'statut' => 1,
-                'created_by' => $commercial->id,
-            ]);
-
             $lavage = Lavage::create([
                 'first_name' => html_entity_decode($request->first_name),
                 'last_name' => html_entity_decode($request->last_name),
@@ -2174,6 +2163,17 @@ class CommercialController extends Controller
                 'role' => $request->filled('role') ? (int) $request->role : 1,
                 'statut' => 1,
                 'created_by' => $commercial->id,
+            ]);
+
+            $stationDeLavage = StationDeLavage::create([
+                'name' => html_entity_decode($request->name),
+                'adresse' => $request->filled('adresse') ? html_entity_decode($request->adresse) : null,
+                'contact' => html_entity_decode($request->contact),
+                'longitude' => $request->longitude,
+                'latitude' => $request->latitude,
+                'logo' => $logoPath,
+                'statut' => 1,
+                'created_by' => $lavage->id,
             ]);
 
             DB::commit();
@@ -2260,8 +2260,10 @@ class CommercialController extends Controller
             ], 401);
         }
 
-        $stationDeLavage = StationDeLavage::where('created_by', $commercial->id)->find($stationDeLavageId);
         $lavage = Lavage::where('created_by', $commercial->id)->find($lavageId);
+        $stationDeLavage = $lavage
+            ? StationDeLavage::where('created_by', $lavage->id)->find($stationDeLavageId)
+            : null;
 
         if (!$stationDeLavage || !$lavage) {
             return response()->json([
@@ -2445,23 +2447,28 @@ class CommercialController extends Controller
                 ], 401);
             }
 
-            $stationsDeLavage = StationDeLavage::where('created_by', $commercial->id)
+            $lavages = Lavage::with('stationDeLavage')
+                ->where('created_by', $commercial->id)
                 ->latest()
                 ->get()
-                ->map(function ($stationDeLavage) {
-                    return $this->attachStationDeLavageLogoUrl($stationDeLavage);
-                });
+                ->map(function ($lavage) {
+                    if ($lavage->stationDeLavage) {
+                        $lavage->setRelation(
+                            'stationDeLavage',
+                            $this->attachStationDeLavageLogoUrl($lavage->stationDeLavage)
+                        );
+                    }
 
-            $lavages = Lavage::where('created_by', $commercial->id)
-                ->latest()
-                ->get();
+                    return $lavage;
+                });
+            $stationsDeLavage = $lavages->pluck('stationDeLavage')->filter()->values();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Liste des stations de lavage et comptes lavage récupérée avec succès.',
+                'message' => 'Liste des lavages et stations de lavage récupérée avec succès.',
                 'data' => [
-                    'stations_de_lavage' => $stationsDeLavage,
                     'lavages' => $lavages,
+                    'stations_de_lavage' => $stationsDeLavage,
                 ],
             ], 200);
         } catch (\Exception $e) {

@@ -27,8 +27,8 @@ class StationDeLavage extends Model
         'created_by' => 'integer',
     ];
 
-    public function creator()
+    public function lavage()
     {
-        return $this->belongsTo(Commercial::class, 'created_by');
+        return $this->belongsTo(Lavage::class, 'created_by');
     }
 }
