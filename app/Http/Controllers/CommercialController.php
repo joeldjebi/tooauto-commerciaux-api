@@ -2089,9 +2089,12 @@ class CommercialController extends Controller
 
     public function storeStationDeLavageWithAccount(Request $request): JsonResponse
     {
+        $this->logStationLogoUploadState($request, 'station_de_lavages.register.received');
+
         $logoUploadError = $this->stationLogoUploadErrorResponse($request);
 
         if ($logoUploadError) {
+            Log::error('Logo station de lavage rejete avant validation', $this->stationLogoUploadDiagnostics($request));
             return $logoUploadError;
         }
 
@@ -2136,11 +2139,19 @@ class CommercialController extends Controller
 
         try {
             if ($request->hasFile('logo')) {
+                Log::info('Upload logo station de lavage vers Wasabi', $this->stationLogoUploadDiagnostics($request));
+
                 $logoPath = $this->wasabiService->uploadFile(
                     $request->file('logo'),
                     'station_de_lavages/logos',
                     'station-lavage'
                 );
+
+                Log::info('Logo station de lavage enregistre sur Wasabi', [
+                    'path' => $logoPath,
+                ]);
+            } else {
+                Log::warning('Aucun fichier logo recu pour la station de lavage', $this->stationLogoUploadDiagnostics($request));
             }
 
             $stationDeLavage = StationDeLavage::create([
@@ -2266,9 +2277,12 @@ class CommercialController extends Controller
 
     public function storeStationService(Request $request): JsonResponse
     {
+        $this->logStationLogoUploadState($request, 'station_services.store.received');
+
         $logoUploadError = $this->stationLogoUploadErrorResponse($request);
 
         if ($logoUploadError) {
+            Log::error('Logo station service rejete avant validation', $this->stationLogoUploadDiagnostics($request));
             return $logoUploadError;
         }
 
@@ -2329,11 +2343,19 @@ class CommercialController extends Controller
             $data['nuit'] = $request->has('nuit') ? (int) $request->nuit : 0;
 
             if ($request->hasFile('logo')) {
+                Log::info('Upload logo station service vers Wasabi', $this->stationLogoUploadDiagnostics($request));
+
                 $data['logo'] = $this->wasabiService->uploadFile(
                     $request->file('logo'),
                     'station_services/logo',
                     'logo'
                 );
+
+                Log::info('Logo station service enregistre sur Wasabi', [
+                    'path' => $data['logo'],
+                ]);
+            } else {
+                Log::warning('Aucun fichier logo recu pour la station service', $this->stationLogoUploadDiagnostics($request));
             }
 
             $stationService = StationService::create($data);
@@ -2703,6 +2725,55 @@ class CommercialController extends Controller
         }
 
         return null;
+    }
+
+    protected function logStationLogoUploadState(Request $request, string $context): void
+    {
+        Log::info('Etat reception logo station: ' . $context, $this->stationLogoUploadDiagnostics($request));
+    }
+
+    protected function stationLogoUploadDiagnostics(Request $request): array
+    {
+        $uploadedFile = $request->file('logo');
+        $fileKeys = array_keys($request->allFiles());
+        $inputKeys = array_keys($request->except(['password', 'station_password']));
+        $phpLogo = $_FILES['logo'] ?? null;
+
+        $diagnostics = [
+            'content_type' => $request->headers->get('content-type'),
+            'content_length' => $request->headers->get('content-length'),
+            'input_keys' => $inputKeys,
+            'file_keys' => $fileKeys,
+            'has_logo_input' => $request->has('logo'),
+            'has_logo_file' => $request->hasFile('logo'),
+            'php_upload_limits' => [
+                'upload_max_filesize' => ini_get('upload_max_filesize'),
+                'post_max_size' => ini_get('post_max_size'),
+                'max_file_uploads' => ini_get('max_file_uploads'),
+            ],
+            'php_files_logo' => $phpLogo ? [
+                'name' => $phpLogo['name'] ?? null,
+                'type' => $phpLogo['type'] ?? null,
+                'size' => $phpLogo['size'] ?? null,
+                'error' => $phpLogo['error'] ?? null,
+            ] : null,
+        ];
+
+        if ($uploadedFile instanceof UploadedFile) {
+            $diagnostics['logo_file'] = [
+                'original_name' => $uploadedFile->getClientOriginalName(),
+                'client_mime' => $uploadedFile->getClientMimeType(),
+                'mime' => $uploadedFile->getMimeType(),
+                'extension' => $uploadedFile->getClientOriginalExtension(),
+                'size' => $uploadedFile->getSize(),
+                'error' => $uploadedFile->getError(),
+                'is_valid' => $uploadedFile->isValid(),
+            ];
+        } else {
+            $diagnostics['logo_file'] = null;
+        }
+
+        return $diagnostics;
     }
 
     protected function attachStationDeLavageLogoUrl($stationDeLavage, ?string $logoPath = null)
