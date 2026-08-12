@@ -81,6 +81,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/station-services/{id}', [CommercialController::class, 'deleteStationService']);
 
         // Route pour créer une station de lavage et son compte lavage
+        Route::get('/station-de-lavages', [CommercialController::class, 'indexStationDeLavageWithAccounts']);
         Route::post('/station-de-lavages/register', [CommercialController::class, 'storeStationDeLavageWithAccount']);
         Route::post('/station-de-lavages/{stationDeLavageId}/lavages/{lavageId}', [CommercialController::class, 'updateStationDeLavageWithAccount']);
 

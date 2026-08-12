@@ -2410,7 +2410,7 @@ class CommercialController extends Controller
                 ], 401);
             }
 
-            $stationServices = StationService::with(['ville', 'commune'])
+            $stationServices = StationService::with(['ville', 'commune', 'stationAccount'])
                 ->where('created_by', $commercial->id)
                 ->latest()
                 ->get()
@@ -2428,6 +2428,51 @@ class CommercialController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Une erreur est survenue lors de la récupération des stations services.',
+                'dev' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function indexStationDeLavageWithAccounts(): JsonResponse
+    {
+        try {
+            $commercial = auth()->user();
+
+            if (!$commercial) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Utilisateur introuvable.',
+                ], 401);
+            }
+
+            $stationsDeLavage = StationDeLavage::where('created_by', $commercial->id)
+                ->latest()
+                ->get()
+                ->map(function ($stationDeLavage) {
+                    return $this->attachStationDeLavageLogoUrl($stationDeLavage);
+                });
+
+            $lavages = Lavage::where('created_by', $commercial->id)
+                ->latest()
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Liste des stations de lavage et comptes lavage récupérée avec succès.',
+                'data' => [
+                    'stations_de_lavage' => $stationsDeLavage,
+                    'lavages' => $lavages,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Erreur index station de lavage avec comptes', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Une erreur est survenue lors de la récupération des stations de lavage.',
                 'dev' => $e->getMessage(),
             ], 500);
         }
