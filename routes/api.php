@@ -80,6 +80,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/station-services/{id}', [CommercialController::class, 'updateStationService']);
         Route::delete('/station-services/{id}', [CommercialController::class, 'deleteStationService']);
 
+        // Route pour créer une station de lavage et son compte lavage
+        Route::post('/station-de-lavages/register', [CommercialController::class, 'storeStationDeLavageWithAccount']);
+
 		// Route pour enregistrer un vehicule
         Route::post('/store-vehicule', [CommercialController::class, 'storeVehicule']);
         Route::post('/update-vehicule/{id}', [CommercialController::class, 'updateVehicule']);

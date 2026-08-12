@@ -32,6 +32,8 @@ use App\Models\Ville;
 use App\Models\Pays;
 use App\Models\StationService;
 use App\Models\Station;
+use App\Models\Lavage;
+use App\Models\StationDeLavage;
 use Validator;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
@@ -2085,6 +2087,143 @@ class CommercialController extends Controller
 		}
 	}
 
+    public function storeStationDeLavageWithAccount(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:100',
+            'adresse' => 'nullable|string|max:500',
+            'contact' => 'required|string|max:20',
+            'longitude' => 'nullable|string|max:20',
+            'latitude' => 'nullable|string|max:20',
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+            'first_name' => 'required|string|max:100',
+            'last_name' => 'required|string|max:100',
+            'mobile' => 'required|string|max:20|unique:lavages,mobile',
+            'email' => 'nullable|email|max:100|unique:lavages,email',
+            'password' => 'nullable|string|min:6|max:100',
+            'role' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Les données fournies ne sont pas valides.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $commercial = auth()->user();
+
+        if (!$commercial) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Utilisateur introuvable.',
+            ], 401);
+        }
+
+        $logoPath = null;
+        $plainPassword = $request->filled('password')
+            ? (string) $request->password
+            : (string) random_int(100000, 999999);
+
+        DB::beginTransaction();
+
+        try {
+            if ($request->hasFile('logo')) {
+                $logoPath = $this->wasabiService->uploadFile(
+                    $request->file('logo'),
+                    'station_de_lavages/logos',
+                    'station-lavage'
+                );
+            }
+
+            $stationDeLavage = StationDeLavage::create([
+                'name' => html_entity_decode($request->name),
+                'adresse' => $request->filled('adresse') ? html_entity_decode($request->adresse) : null,
+                'contact' => html_entity_decode($request->contact),
+                'longitude' => $request->longitude,
+                'latitude' => $request->latitude,
+                'logo' => $logoPath,
+                'statut' => 1,
+                'created_by' => $commercial->id,
+            ]);
+
+            $lavage = Lavage::create([
+                'first_name' => html_entity_decode($request->first_name),
+                'last_name' => html_entity_decode($request->last_name),
+                'mobile' => html_entity_decode($request->mobile),
+                'email' => $request->filled('email') ? html_entity_decode($request->email) : null,
+                'password' => Hash::make($plainPassword),
+                'role' => $request->filled('role') ? (int) $request->role : 1,
+                'statut' => 1,
+                'created_by' => $commercial->id,
+            ]);
+
+            DB::commit();
+
+            $smsSent = false;
+            $smsError = null;
+
+            try {
+                $login = $lavage->email ?: $lavage->mobile;
+                $message = strtoupper(
+                    "Votre compte lavage TOOAUTO a ete cree avec succes\n" .
+                    "Station : " . $stationDeLavage->name . "\n" .
+                    "Login : " . $login . "\n" .
+                    "Mot de passe : " . $plainPassword
+                );
+
+                $this->sendMessageConfirmOrder($message, $lavage->mobile);
+                $smsSent = true;
+            } catch (\Exception $e) {
+                $smsError = $e->getMessage();
+                Log::error('Erreur SMS creation station de lavage', [
+                    'lavage_id' => $lavage->id,
+                    'station_de_lavage_id' => $stationDeLavage->id,
+                    'message' => $smsError,
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $smsSent
+                    ? 'Station de lavage et compte lavage créés avec succès. Les accès ont été envoyés par SMS.'
+                    : 'Station de lavage et compte lavage créés avec succès, mais le SMS n\'a pas pu être envoyé.',
+                'data' => [
+                    'station_de_lavage' => $this->attachStationDeLavageLogoUrl($stationDeLavage),
+                    'lavage' => $lavage,
+                    'access_login' => $lavage->email ?: $lavage->mobile,
+                    'sms_sent' => $smsSent,
+                    'sms_error' => $smsSent ? null : $smsError,
+                ],
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            if ($logoPath) {
+                try {
+                    $this->wasabiService->deleteFile($logoPath);
+                } catch (\Throwable $deleteError) {
+                    Log::error('Erreur suppression logo station de lavage apres rollback', [
+                        'path' => $logoPath,
+                        'message' => $deleteError->getMessage(),
+                    ]);
+                }
+            }
+
+            Log::error('Erreur creation station de lavage avec compte', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Une erreur est survenue lors de la création de la station de lavage.',
+                'dev' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function indexStationService(): JsonResponse
     {
         try {
@@ -2134,18 +2273,19 @@ class CommercialController extends Controller
             'adresse_map' => 'nullable|string|max:500',
             'borne_electrique' => 'nullable|integer|min:0',
             'statut' => 'sometimes|required|integer|in:0,1',
-            'station_electrique' => 'required|integer|in:0,1',
+            'station_electrique' => 'sometimes|required|integer|in:0,1',
             'nuit' => 'sometimes|required|integer|in:0,1',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:8048',
             'station_first_name' => 'nullable|string|max:200',
             'station_last_name' => 'nullable|string|max:200',
             'station_mobile' => 'nullable|string|max:20|unique:stations,mobile',
             'station_email' => 'nullable|email|max:300|unique:stations,email',
+            'station_password' => 'nullable|string|min:6|max:100',
             'station_role' => 'nullable|integer',
         ]);
 
         $validator->after(function ($validator) use ($request) {
-            if ((int) $request->station_electrique === 1 && (int) $request->borne_electrique < 1) {
+            if ((int) $request->input('station_electrique', 0) === 1 && (int) $request->borne_electrique < 1) {
                 $validator->errors()->add('borne_electrique', 'Le nombre de bornes électriques doit être supérieur ou égal à 1.');
             }
         });
@@ -2173,8 +2313,8 @@ class CommercialController extends Controller
             $data = $this->stationServicePayload($request);
             $data['created_by'] = $commercial->id;
             $data['statut'] = $request->has('statut') ? (int) $request->statut : 1;
-            $data['station_electrique'] = (int) $request->station_electrique;
-            $data['borne_electrique'] = (int) $request->station_electrique === 1 ? (int) $request->borne_electrique : 0;
+            $data['station_electrique'] = (int) $request->input('station_electrique', 0);
+            $data['borne_electrique'] = (int) $request->input('station_electrique', 0) === 1 ? (int) $request->borne_electrique : 0;
             $data['nuit'] = $request->has('nuit') ? (int) $request->nuit : 0;
 
             if ($request->hasFile('logo')) {
@@ -2186,7 +2326,9 @@ class CommercialController extends Controller
             }
 
             $stationService = StationService::create($data);
-            $plainPassword = Str::random(10);
+            $plainPassword = $request->filled('station_password')
+                ? (string) $request->station_password
+                : (string) random_int(100000, 999999);
             $stationAccount = $this->stationAccountPayload($request, $stationService, $commercial->id, $plainPassword);
             $canSendSms = $stationAccount['can_send_sms'];
             unset($stationAccount['can_send_sms']);
@@ -2206,11 +2348,7 @@ class CommercialController extends Controller
                     . " Mot de passe: " . $plainPassword;
 
                 if ($canSendSms) {
-                    $this->smsService->sendSmsMtarget(
-                        $message,
-                        $station->mobile,
-                        config('services.mtarget.sender', 'TOO AUTO')
-                    );
+                    $this->sendMessageConfirmOrder($message, $station->mobile);
                     $smsSent = true;
                 }
             } catch (\Exception $e) {
@@ -2509,6 +2647,21 @@ class CommercialController extends Controller
         $stationService->commune_nom = optional($stationService->commune)->nom;
 
         return $this->attachStationServiceLogoUrl($stationService);
+    }
+
+    protected function attachStationDeLavageLogoUrl($stationDeLavage)
+    {
+        if (!$stationDeLavage || empty($stationDeLavage->logo)) {
+            return $stationDeLavage;
+        }
+
+        try {
+            $stationDeLavage->logo = $this->wasabiService->temporaryUrl($stationDeLavage->logo) ?? $stationDeLavage->logo;
+        } catch (\Throwable $e) {
+            $stationDeLavage->logo = $this->wasabiService->extractPath($stationDeLavage->logo) ?? $stationDeLavage->logo;
+        }
+
+        return $stationDeLavage;
     }
 
 
