@@ -2165,11 +2165,10 @@ class CommercialController extends Controller
             $smsError = null;
 
             try {
-                $login = $lavage->email ?: $lavage->mobile;
                 $message = strtoupper(
                     "Votre compte lavage TOOAUTO a ete cree avec succes\n" .
                     "Station : " . $stationDeLavage->name . "\n" .
-                    "Login : " . $login . "\n" .
+                    "Numero : " . $lavage->mobile . "\n" .
                     "Mot de passe : " . $plainPassword
                 );
 
@@ -2192,7 +2191,7 @@ class CommercialController extends Controller
                 'data' => [
                     'station_de_lavage' => $this->attachStationDeLavageLogoUrl($stationDeLavage),
                     'lavage' => $lavage,
-                    'access_login' => $lavage->email ?: $lavage->mobile,
+                    'access_mobile' => $lavage->mobile,
                     'sms_sent' => $smsSent,
                     'sms_error' => $smsSent ? null : $smsError,
                 ],
@@ -2343,8 +2342,8 @@ class CommercialController extends Controller
             $smsError = null;
 
             try {
-                $message = "Votre compte station TOO AUTO a ete cree. Login: "
-                    . ($station->email ?: $station->mobile)
+                $message = "Votre compte station TOOAUTO a ete cree. Numero: "
+                    . $station->mobile
                     . " Mot de passe: " . $plainPassword;
 
                 if ($canSendSms) {
