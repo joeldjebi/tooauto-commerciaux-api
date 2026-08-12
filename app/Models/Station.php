@@ -36,6 +36,6 @@ class Station extends Model
 
     public function stationService()
     {
-        return $this->belongsTo(StationService::class, 'station_service_id');
+        return $this->hasOne(StationService::class, 'created_by');
     }
 }

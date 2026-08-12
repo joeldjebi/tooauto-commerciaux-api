@@ -51,11 +51,11 @@ class StationService extends Model
 
     public function creator()
     {
-        return $this->belongsTo(Commercial::class, 'created_by');
+        return $this->belongsTo(Station::class, 'created_by');
     }
 
     public function stationAccount()
     {
-        return $this->hasOne(Station::class, 'station_service_id');
+        return $this->belongsTo(Station::class, 'created_by');
     }
 }

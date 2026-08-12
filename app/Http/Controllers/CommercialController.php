@@ -2412,8 +2412,13 @@ class CommercialController extends Controller
                 ], 401);
             }
 
+            $stationIds = Station::where('created_by', $commercial->id)->pluck('id');
+
             $stationServices = StationService::with(['ville', 'commune', 'stationAccount'])
-                ->where('created_by', $commercial->id)
+                ->where(function ($query) use ($stationIds, $commercial) {
+                    $query->whereIn('created_by', $stationIds)
+                        ->orWhere('created_by', $commercial->id);
+                })
                 ->latest()
                 ->get()
                 ->map(function ($stationService) {
@@ -2577,6 +2582,7 @@ class CommercialController extends Controller
             unset($stationAccount['can_send_sms']);
 
             $station = Station::create($stationAccount);
+            $stationService->update(['created_by' => $station->id]);
 
             DB::commit();
 
@@ -2604,7 +2610,7 @@ class CommercialController extends Controller
                 'message' => $smsSent
                     ? 'Station service enregistrée avec succès. Le mot de passe a été envoyé par SMS.'
                     : 'Station service enregistrée avec succès, mais le SMS n\'a pas pu être envoyé.',
-                'data' => $this->formatStationServiceForResponse($stationService->refresh()->load(['ville', 'commune'])),
+                'data' => $this->formatStationServiceForResponse($stationService->refresh()->load(['ville', 'commune', 'stationAccount'])),
                 'station' => $station,
                 'sms_sent' => $smsSent,
                 'sms_error' => $smsSent ? null : $smsError,
@@ -2657,7 +2663,12 @@ class CommercialController extends Controller
             ], 404);
         }
 
-        $station = Station::where('station_service_id', $stationService->id)->first();
+        $station = Station::where('created_by', auth()->id())
+            ->where(function ($query) use ($stationService) {
+                $query->where('id', $stationService->created_by)
+                    ->orWhere('station_service_id', $stationService->id);
+            })
+            ->first();
         $stationId = $station ? $station->id : null;
         $stationMobileUniqueRule = 'nullable|string|max:20|unique:stations,mobile' . ($stationId ? ',' . $stationId : '');
         $stationEmailUniqueRule = 'nullable|email|max:300|unique:stations,email' . ($stationId ? ',' . $stationId : '');
@@ -2943,8 +2954,13 @@ class CommercialController extends Controller
             return null;
         }
 
-        return StationService::with(['ville', 'commune'])
-            ->where('created_by', $commercial->id)
+        $stationIds = Station::where('created_by', $commercial->id)->pluck('id');
+
+        return StationService::with(['ville', 'commune', 'stationAccount'])
+            ->where(function ($query) use ($stationIds, $commercial) {
+                $query->whereIn('created_by', $stationIds)
+                    ->orWhere('created_by', $commercial->id);
+            })
             ->find($id);
     }
 
