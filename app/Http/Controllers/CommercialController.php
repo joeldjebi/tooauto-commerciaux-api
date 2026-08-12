@@ -2240,6 +2240,164 @@ class CommercialController extends Controller
         }
     }
 
+    public function updateStationDeLavageWithAccount(Request $request, $stationDeLavageId, $lavageId): JsonResponse
+    {
+        $this->logStationLogoUploadState($request, 'station_de_lavages.update.received');
+
+        $logoUploadError = $this->stationLogoUploadErrorResponse($request);
+
+        if ($logoUploadError) {
+            Log::error('Logo station de lavage rejete avant update', $this->stationLogoUploadDiagnostics($request));
+            return $logoUploadError;
+        }
+
+        $commercial = auth()->user();
+
+        if (!$commercial) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Utilisateur introuvable.',
+            ], 401);
+        }
+
+        $stationDeLavage = StationDeLavage::where('created_by', $commercial->id)->find($stationDeLavageId);
+        $lavage = Lavage::where('created_by', $commercial->id)->find($lavageId);
+
+        if (!$stationDeLavage || !$lavage) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Station de lavage ou compte lavage introuvable.',
+            ], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'sometimes|required|string|max:100',
+            'adresse' => 'nullable|string|max:500',
+            'contact' => 'sometimes|required|string|max:20',
+            'longitude' => 'nullable|string|max:20',
+            'latitude' => 'nullable|string|max:20',
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+            'first_name' => 'sometimes|required|string|max:100',
+            'last_name' => 'sometimes|required|string|max:100',
+            'mobile' => 'sometimes|required|string|max:20|unique:lavages,mobile,' . $lavage->id,
+            'email' => 'nullable|email|max:100|unique:lavages,email,' . $lavage->id,
+            'password' => 'nullable|string|min:6|max:100',
+            'role' => 'nullable|integer',
+            'statut' => 'sometimes|required|integer|in:0,1',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Les données fournies ne sont pas valides.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $plainPassword = $request->filled('password') ? (string) $request->password : null;
+        $logoPath = $stationDeLavage->logo;
+
+        DB::beginTransaction();
+
+        try {
+            $stationData = [];
+
+            foreach (['name', 'adresse', 'contact', 'longitude', 'latitude', 'statut'] as $field) {
+                if ($request->has($field)) {
+                    $value = $request->$field;
+                    $stationData[$field] = is_string($value) ? html_entity_decode($value) : $value;
+                }
+            }
+
+            if ($request->hasFile('logo')) {
+                Log::info('Upload logo station de lavage update vers Wasabi', $this->stationLogoUploadDiagnostics($request));
+                $this->wasabiService->deleteFile($stationDeLavage->logo);
+                $logoPath = $this->wasabiService->uploadFile(
+                    $request->file('logo'),
+                    'station_de_lavages/logos',
+                    'station-lavage'
+                );
+                $stationData['logo'] = $logoPath;
+                Log::info('Logo station de lavage update enregistre sur Wasabi', ['path' => $logoPath]);
+            }
+
+            if (!empty($stationData)) {
+                $stationDeLavage->update($stationData);
+            }
+
+            $lavageData = [];
+
+            foreach (['first_name', 'last_name', 'mobile', 'email', 'role', 'statut'] as $field) {
+                if ($request->has($field)) {
+                    $value = $request->$field;
+                    $lavageData[$field] = is_string($value) ? html_entity_decode($value) : $value;
+                }
+            }
+
+            if (array_key_exists('email', $lavageData)) {
+                $lavageData['email'] = $request->filled('email') ? html_entity_decode($request->email) : null;
+            }
+
+            if ($plainPassword) {
+                $lavageData['password'] = Hash::make($plainPassword);
+            }
+
+            if (!empty($lavageData)) {
+                $lavage->update($lavageData);
+            }
+
+            DB::commit();
+
+            $smsSent = false;
+            $smsError = null;
+
+            if ($plainPassword) {
+                try {
+                    $message = strtoupper(
+                        "Vos acces lavage TOOAUTO ont ete mis a jour\n" .
+                        "Numero : " . $lavage->fresh()->mobile . "\n" .
+                        "Mot de passe : " . $plainPassword
+                    );
+                    $this->sendMessageConfirmOrder($message, $lavage->fresh()->mobile);
+                    $smsSent = true;
+                } catch (\Exception $e) {
+                    $smsError = $e->getMessage();
+                    Log::error('Erreur SMS update station de lavage', [
+                        'lavage_id' => $lavage->id,
+                        'station_de_lavage_id' => $stationDeLavage->id,
+                        'message' => $smsError,
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Station de lavage et compte lavage mis à jour avec succès.',
+                'data' => [
+                    'station_de_lavage' => $this->attachStationDeLavageLogoUrl($stationDeLavage->refresh(), $logoPath),
+                    'lavage' => $lavage->refresh(),
+                    'sms_sent' => $smsSent,
+                    'sms_error' => $smsSent ? null : $smsError,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Erreur update station de lavage avec compte', [
+                'station_de_lavage_id' => $stationDeLavage->id,
+                'lavage_id' => $lavage->id,
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Une erreur est survenue lors de la mise à jour de la station de lavage.',
+                'dev' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function indexStationService(): JsonResponse
     {
         try {
@@ -2429,6 +2587,15 @@ class CommercialController extends Controller
 
     public function updateStationService(Request $request, $id): JsonResponse
     {
+        $this->logStationLogoUploadState($request, 'station_services.update.received');
+
+        $logoUploadError = $this->stationLogoUploadErrorResponse($request);
+
+        if ($logoUploadError) {
+            Log::error('Logo station service rejete avant update', $this->stationLogoUploadDiagnostics($request));
+            return $logoUploadError;
+        }
+
         $stationService = $this->findStationServiceForCurrentUser($id);
 
         if (!$stationService) {
@@ -2437,6 +2604,11 @@ class CommercialController extends Controller
                 'message' => 'Station service introuvable.',
             ], 404);
         }
+
+        $station = Station::where('station_service_id', $stationService->id)->first();
+        $stationId = $station ? $station->id : null;
+        $stationMobileUniqueRule = 'nullable|string|max:20|unique:stations,mobile' . ($stationId ? ',' . $stationId : '');
+        $stationEmailUniqueRule = 'nullable|email|max:300|unique:stations,email' . ($stationId ? ',' . $stationId : '');
 
         $validator = Validator::make($request->all(), [
             'name' => 'sometimes|required|string|max:300',
@@ -2453,6 +2625,13 @@ class CommercialController extends Controller
             'station_electrique' => 'sometimes|required|integer|in:0,1',
             'nuit' => 'sometimes|required|integer|in:0,1',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:8048',
+            'station_first_name' => 'nullable|string|max:200',
+            'station_last_name' => 'nullable|string|max:200',
+            'station_mobile' => $stationMobileUniqueRule,
+            'station_email' => $stationEmailUniqueRule,
+            'station_password' => 'nullable|string|min:6|max:100',
+            'station_role' => 'nullable|integer',
+            'station_statut' => 'nullable|integer|in:0,1',
         ]);
 
         $validator->after(function ($validator) use ($request, $stationService) {
@@ -2481,32 +2660,94 @@ class CommercialController extends Controller
 
         try {
             $data = $this->stationServicePayload($request);
+            $plainPassword = $request->filled('station_password') ? (string) $request->station_password : null;
 
             if (array_key_exists('station_electrique', $data) && (int) $data['station_electrique'] === 0) {
                 $data['borne_electrique'] = 0;
             }
 
             if ($request->hasFile('logo')) {
+                Log::info('Upload logo station service update vers Wasabi', $this->stationLogoUploadDiagnostics($request));
                 $this->wasabiService->deleteFile($stationService->logo);
                 $data['logo'] = $this->wasabiService->uploadFile(
                     $request->file('logo'),
                     'station_services/logo',
                     'logo'
                 );
+                Log::info('Logo station service update enregistre sur Wasabi', [
+                    'path' => $data['logo'],
+                ]);
             }
 
             if (!empty($data)) {
                 $stationService->update($data);
             }
 
+            if ($station) {
+                $stationData = [];
+
+                $stationFieldMap = [
+                    'station_first_name' => 'first_name',
+                    'station_last_name' => 'last_name',
+                    'station_mobile' => 'mobile',
+                    'station_email' => 'email',
+                    'station_role' => 'role',
+                    'station_statut' => 'statut',
+                ];
+
+                foreach ($stationFieldMap as $requestField => $column) {
+                    if ($request->has($requestField)) {
+                        $value = $request->$requestField;
+                        $stationData[$column] = is_string($value) ? html_entity_decode($value) : $value;
+                    }
+                }
+
+                if (array_key_exists('email', $stationData)) {
+                    $stationData['email'] = $request->filled('station_email') ? html_entity_decode($request->station_email) : null;
+                }
+
+                if ($plainPassword) {
+                    $stationData['password'] = Hash::make($plainPassword);
+                }
+
+                if (!empty($stationData)) {
+                    $station->update($stationData);
+                }
+            }
+
             DB::commit();
 
             $stationService->load(['ville', 'commune']);
 
+            $smsSent = false;
+            $smsError = null;
+
+            if ($plainPassword && $station) {
+                try {
+                    $freshStation = $station->fresh();
+                    $message = "Vos acces station TOOAUTO ont ete mis a jour. Numero: "
+                        . $freshStation->mobile
+                        . " Mot de passe: " . $plainPassword;
+
+                    $this->sendMessageConfirmOrder($message, $freshStation->mobile);
+                    $smsSent = true;
+                } catch (\Exception $e) {
+                    $smsError = $e->getMessage();
+                    Log::error('Erreur SMS update station service', [
+                        'station_service_id' => $stationService->id,
+                        'station_id' => optional($station)->id,
+                        'message' => $smsError,
+                    ]);
+                }
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Station service mise à jour avec succès.',
-                'data' => $this->formatStationServiceForResponse($stationService),
+                'message' => 'Station service et compte station mis à jour avec succès.',
+                'data' => $this->formatStationServiceForResponse($stationService->refresh()->load(['ville', 'commune'])),
+                'station' => $station ? $station->refresh() : null,
+                'sms_sent' => $smsSent,
+                'sms_error' => $smsSent ? null : $smsError,
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
