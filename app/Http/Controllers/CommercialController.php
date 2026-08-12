@@ -2089,6 +2089,12 @@ class CommercialController extends Controller
 
     public function storeStationDeLavageWithAccount(Request $request): JsonResponse
     {
+        $logoUploadError = $this->stationLogoUploadErrorResponse($request);
+
+        if ($logoUploadError) {
+            return $logoUploadError;
+        }
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:100',
             'adresse' => 'nullable|string|max:500',
@@ -2260,6 +2266,12 @@ class CommercialController extends Controller
 
     public function storeStationService(Request $request): JsonResponse
     {
+        $logoUploadError = $this->stationLogoUploadErrorResponse($request);
+
+        if ($logoUploadError) {
+            return $logoUploadError;
+        }
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:300',
             'ville_id' => 'nullable|integer|exists:villes,id',
@@ -2656,6 +2668,41 @@ class CommercialController extends Controller
         $stationService->commune_nom = optional($stationService->commune)->nom;
 
         return $this->attachStationServiceLogoUrl($stationService);
+    }
+
+    protected function stationLogoUploadErrorResponse(Request $request): ?JsonResponse
+    {
+        $uploadedFile = $request->file('logo');
+
+        if ($uploadedFile instanceof UploadedFile && !$uploadedFile->isValid()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le logo n\'a pas pu être reçu par le serveur.',
+                'errors' => [
+                    'logo' => [$this->uploadErrorMessage($uploadedFile->getError())],
+                ],
+                'limits' => [
+                    'upload_max_filesize' => ini_get('upload_max_filesize'),
+                    'post_max_size' => ini_get('post_max_size'),
+                ],
+            ], 422);
+        }
+
+        if ($request->has('logo') && !$request->hasFile('logo')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le champ logo a été envoyé, mais il n\'a pas été reçu comme fichier valide.',
+                'errors' => [
+                    'logo' => ['Envoyez le logo en multipart/form-data avec la syntaxe logo=@/chemin/vers/logo.png.'],
+                ],
+                'limits' => [
+                    'upload_max_filesize' => ini_get('upload_max_filesize'),
+                    'post_max_size' => ini_get('post_max_size'),
+                ],
+            ], 422);
+        }
+
+        return null;
     }
 
     protected function attachStationDeLavageLogoUrl($stationDeLavage, ?string $logoPath = null)
