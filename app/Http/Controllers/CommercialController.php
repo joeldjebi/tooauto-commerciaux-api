@@ -2189,7 +2189,7 @@ class CommercialController extends Controller
                     ? 'Station de lavage et compte lavage créés avec succès. Les accès ont été envoyés par SMS.'
                     : 'Station de lavage et compte lavage créés avec succès, mais le SMS n\'a pas pu être envoyé.',
                 'data' => [
-                    'station_de_lavage' => $this->attachStationDeLavageLogoUrl($stationDeLavage),
+                    'station_de_lavage' => $this->attachStationDeLavageLogoUrl($stationDeLavage->refresh(), $logoPath),
                     'lavage' => $lavage,
                     'access_mobile' => $lavage->mobile,
                     'sms_sent' => $smsSent,
@@ -2360,7 +2360,7 @@ class CommercialController extends Controller
                 'message' => $smsSent
                     ? 'Station service enregistrée avec succès. Le mot de passe a été envoyé par SMS.'
                     : 'Station service enregistrée avec succès, mais le SMS n\'a pas pu être envoyé.',
-                'data' => $this->formatStationServiceForResponse($stationService),
+                'data' => $this->formatStationServiceForResponse($stationService->refresh()->load(['ville', 'commune'])),
                 'station' => $station,
                 'sms_sent' => $smsSent,
                 'sms_error' => $smsSent ? null : $smsError,
@@ -2623,14 +2623,24 @@ class CommercialController extends Controller
 
     protected function attachStationServiceLogoUrl($stationService)
     {
-        if (!$stationService || empty($stationService->logo)) {
+        if (!$stationService) {
+            return $stationService;
+        }
+
+        $logoPath = $stationService->logo;
+        $stationService->logo_path = $logoPath;
+        $stationService->logo_url = null;
+
+        if (empty($logoPath)) {
             return $stationService;
         }
 
         try {
-            $stationService->logo = $this->wasabiService->temporaryUrl($stationService->logo) ?? $stationService->logo;
+            $stationService->logo_url = $this->wasabiService->temporaryUrl($logoPath) ?? $logoPath;
+            $stationService->logo = $stationService->logo_url;
         } catch (\Throwable $e) {
-            $stationService->logo = $this->wasabiService->extractPath($stationService->logo) ?? $stationService->logo;
+            $stationService->logo_url = $this->wasabiService->extractPath($logoPath) ?? $logoPath;
+            $stationService->logo = $stationService->logo_url;
         }
 
         return $stationService;
@@ -2648,16 +2658,26 @@ class CommercialController extends Controller
         return $this->attachStationServiceLogoUrl($stationService);
     }
 
-    protected function attachStationDeLavageLogoUrl($stationDeLavage)
+    protected function attachStationDeLavageLogoUrl($stationDeLavage, ?string $logoPath = null)
     {
-        if (!$stationDeLavage || empty($stationDeLavage->logo)) {
+        if (!$stationDeLavage) {
+            return $stationDeLavage;
+        }
+
+        $logoPath = $logoPath ?: $stationDeLavage->logo;
+        $stationDeLavage->logo_path = $logoPath;
+        $stationDeLavage->logo_url = null;
+
+        if (empty($logoPath)) {
             return $stationDeLavage;
         }
 
         try {
-            $stationDeLavage->logo = $this->wasabiService->temporaryUrl($stationDeLavage->logo) ?? $stationDeLavage->logo;
+            $stationDeLavage->logo_url = $this->wasabiService->temporaryUrl($logoPath) ?? $logoPath;
+            $stationDeLavage->logo = $stationDeLavage->logo_url;
         } catch (\Throwable $e) {
-            $stationDeLavage->logo = $this->wasabiService->extractPath($stationDeLavage->logo) ?? $stationDeLavage->logo;
+            $stationDeLavage->logo_url = $this->wasabiService->extractPath($logoPath) ?? $logoPath;
+            $stationDeLavage->logo = $stationDeLavage->logo_url;
         }
 
         return $stationDeLavage;
